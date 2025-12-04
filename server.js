@@ -388,7 +388,7 @@ app.post('/forgot-password', async (req, res) => {
     );
 
     // Send reset email
-    const resetLink = `http://localhost:3000/reset-password?token=${resetToken}`;
+    const resetLink = `${process.env.API_BASE_URL}/reset-password?token=${resetToken}`;
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: email,

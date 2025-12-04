@@ -28,7 +28,7 @@ async function testAdminRegistrations() {
     console.log('🔑 Admin token generated');
 
     // Test the endpoint
-    const response = await fetch('http://localhost:3000/admin/registrations?page=1&limit=10&sortBy=registrationDate&sortOrder=desc', {
+    const response = await fetch(`${process.env.API_BASE_URL}/admin/registrations?page=1&limit=10&sortBy=registrationDate&sortOrder=desc`, {
       headers: {
         'Authorization': `Bearer ${adminToken}`,
         'Content-Type': 'application/json'
