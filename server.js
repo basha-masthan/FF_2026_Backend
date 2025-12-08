@@ -247,6 +247,26 @@ function generateOTP() {
   return Math.floor(10000 + Math.random() * 90000).toString();
 }
 
+// Auto-complete tournaments that have passed their start time
+async function autoCompleteTournaments() {
+  try {
+    const now = new Date();
+    const result = await Tournament.updateMany(
+      {
+        startTime: { $lt: now },
+        status: { $in: ['upcoming', 'active'] }
+      },
+      { status: 'completed' }
+    );
+
+    if (result.modifiedCount > 0) {
+      console.log(`Auto-completed ${result.modifiedCount} tournaments`);
+    }
+  } catch (error) {
+    console.error('Error auto-completing tournaments:', error);
+  }
+}
+
 // Routes
 app.post('/signup', async (req, res) => {
   try {
@@ -361,6 +381,7 @@ app.post('/login', async (req, res) => {
 
 // Token verification route
 app.get('/verify-token', authenticateToken, (req, res) => {
+  console.log('Verify token endpoint called by user:', req.user.userId);
   res.json({ valid: true, user: req.user });
 });
 
@@ -709,6 +730,9 @@ app.get('/banners', (req, res) => {
 // Public tournament endpoints for users
 app.get('/tournaments', async (req, res) => {
   try {
+    // Auto-complete any tournaments that should be completed
+    await autoCompleteTournaments();
+
     const tournaments = await Tournament.find({ status: { $in: ['upcoming', 'active'] } })
       .sort({ startTime: 1 })
       .limit(20);
@@ -878,9 +902,12 @@ app.post('/tournaments/:id/register', authenticateToken, async (req, res) => {
 
 app.get('/my-tournaments', authenticateToken, async (req, res) => {
   try {
+    // Auto-complete any tournaments that should be completed
+    await autoCompleteTournaments();
+
     const tournaments = await Tournament.find({
       registeredUsers: req.user.userId,
-      status: { $in: ['upcoming', 'active'] }
+      status: { $in: ['upcoming', 'active', 'completed'] }
     }).sort({ startTime: 1 });
 
     res.json(tournaments);
@@ -1912,6 +1939,12 @@ app.get('/tournaments/:tournamentId/room', authenticateToken, async (req, res) =
   }
 });
 
+
+// Auto-complete tournaments every 30 seconds
+setInterval(autoCompleteTournaments, 30 * 1000);
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  // Run initial check on startup
+  autoCompleteTournaments();
 });

@@ -1,72 +1,90 @@
 const mongoose = require('mongoose');
-const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-}).then(() => {
-  console.log('Connected to MongoDB');
-}).catch(err => {
-  console.error('MongoDB connection error:', err);
-  process.exit(1);
+// Registration Schema (same as in server.js)
+const registrationSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  tournamentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tournament', required: true },
+  tournamentIdString: { type: String, required: true },
+  registrationDate: { type: Date, default: Date.now },
+  status: {
+    type: String,
+    enum: ['registered', 'cancelled', 'refunded'],
+    default: 'registered'
+  },
+  entryFee: { type: Number, required: true },
+  paymentMethod: {
+    type: String,
+    enum: ['wallet', 'direct'],
+    default: 'wallet'
+  },
+  metadata: {
+    userSnapshot: {
+      fullname: String,
+      email: String,
+      mobile: String,
+      age: Number,
+      state: String
+    },
+    tournamentSnapshot: {
+      tournamentId: String,
+      mode: String,
+      teamSize: String,
+      map: String,
+      startTime: Date
+    }
+  }
 });
 
-// Test admin registrations endpoint
+const Registration = mongoose.model('Registration', registrationSchema);
+
 async function testAdminRegistrations() {
   try {
-    console.log('🧪 Testing admin registrations endpoint...');
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log('Connected to MongoDB');
 
-    // Generate admin token
-    const adminToken = jwt.sign(
-      { username: 'admin', email: 'official4basha@gmail.com', role: 'admin' },
-      process.env.JWT_SECRET,
-      { expiresIn: '8h' }
-    );
+    // Count total registrations
+    const totalRegistrations = await Registration.countDocuments();
+    console.log('Total registrations in database:', totalRegistrations);
 
-    console.log('🔑 Admin token generated');
+    if (totalRegistrations > 0) {
+      // Get sample registrations (without populate to avoid schema issues)
+      const registrations = await Registration.find()
+        .limit(5)
+        .sort({ registrationDate: -1 });
 
-    // Test the endpoint
-    const response = await fetch(`${process.env.API_BASE_URL}/admin/registrations?page=1&limit=10&sortBy=registrationDate&sortOrder=desc`, {
-      headers: {
-        'Authorization': `Bearer ${adminToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
+      console.log('\nSample registrations:');
+      registrations.forEach((reg, index) => {
+        console.log(`${index + 1}. ${reg.metadata.userSnapshot.fullname} registered for ${reg.tournamentIdString} on ${reg.registrationDate}`);
+      });
 
-    if (response.ok) {
-      const data = await response.json();
-      console.log('✅ Admin registrations endpoint working!');
-      console.log(`📊 Total registrations: ${data.pagination.total}`);
-      console.log(`📄 Page: ${data.pagination.page}, Limit: ${data.pagination.limit}`);
-      console.log(`🔄 Sort by: ${data.sortBy}, Order: ${data.sortOrder}`);
+      // Test sorting by different criteria
+      console.log('\nTesting sorting by participant name:');
+      const sortedByName = await Registration.find()
+        .sort({ 'metadata.userSnapshot.fullname': 1 })
+        .limit(3);
+      sortedByName.forEach(reg => {
+        console.log(`- ${reg.metadata.userSnapshot.fullname}`);
+      });
 
-      if (data.registrations.length > 0) {
-        console.log('📋 Sample registration:');
-        const sample = data.registrations[0];
-        console.log(`   👤 User: ${sample.user.fullname} (${sample.user.email})`);
-        console.log(`   🏆 Tournament: ${sample.tournament.tournamentId}`);
-        console.log(`   📅 Registration Date: ${new Date(sample.registrationDate).toLocaleString()}`);
-        console.log(`   💰 Entry Fee: $${sample.entryFee}`);
-        console.log(`   🎮 Free Fire ID: ${sample.freeFireId || 'N/A'}`);
-        console.log(`   👥 Team: ${sample.teamSelection || 'N/A'}`);
-        console.log(`   ✅ Terms Accepted: ${sample.termsAccepted}`);
-      } else {
-        console.log('📭 No registrations found');
-      }
+      console.log('\nTesting sorting by tournament ID:');
+      const sortedByTournament = await Registration.find()
+        .sort({ tournamentIdString: 1 })
+        .limit(3);
+      sortedByTournament.forEach(reg => {
+        console.log(`- ${reg.tournamentIdString}: ${reg.metadata.userSnapshot.fullname}`);
+      });
+
     } else {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('❌ Admin registrations endpoint failed:', errorData);
+      console.log('No registrations found. The new registration system may not be active yet.');
+      console.log('Try registering for a tournament through the frontend to test the new system.');
     }
 
-  } catch (error) {
-    console.error('❌ Test failed:', error);
-  } finally {
-    mongoose.connection.close();
     process.exit(0);
+  } catch (error) {
+    console.error('Error testing admin registrations:', error);
+    process.exit(1);
   }
 }
 
-// Run the test
 testAdminRegistrations();
